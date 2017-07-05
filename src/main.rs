@@ -1,3 +1,5 @@
+#![feature(box_patterns)]
+
 #[macro_use]
 extern crate nom;
 
@@ -13,6 +15,18 @@ enum Arith {
     Exp(Box<Arith>, Box<Arith>),
     Num(f32),
     Paren(Box<Arith>),
+}
+
+fn eval(arith: Arith) -> f32 {
+    match arith {
+        Arith::Add(box a1, box a2) => eval(a1) + eval(a2),
+        Arith::Sub(box a1, box a2) => eval(a1) - eval(a2),
+        Arith::Mul(box a1, box a2) => eval(a1) * eval(a2),
+        Arith::Div(box a1, box a2) => eval(a1) / eval(a2),
+        Arith::Exp(box a1, box a2) => eval(a1).powf(eval(a2)),
+        Arith::Num(f) => f,
+        Arith::Paren(box a1) => eval(a1),
+    }
 }
 
 #[derive(Debug)]
@@ -118,4 +132,5 @@ named!(arith<Arith>, do_parse!(
 fn main() {
     let r = arith(b" (2^3.0)^4.0 + ( -32.1*4.1)");
     println!("{:?}", r);
+    println!("{}", eval(r.unwrap().1));
 }
