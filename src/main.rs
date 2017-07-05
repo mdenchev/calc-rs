@@ -2,8 +2,7 @@
 extern crate nom;
 
 use std::str;
-use nom::{GetOutput, digit, multispace};
-use std::str::FromStr;
+use nom::{digit};
 
 #[derive(Debug)]
 enum Arith {
@@ -60,11 +59,6 @@ named!(factor<Arith>, alt_complete!(
         Arith::Num)
     | parens
 ));
-
-fn rev_vec<T>(mut v: Vec<T>) -> Vec<T> {
-    v.reverse();
-    v
-}
 
 fn fold_exprs(init: Arith, remainder: Vec<(Oper, Arith)>) -> Arith {
     remainder.into_iter().fold(init, |acc, (oper, arith)| {
