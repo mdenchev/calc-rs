@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["md <mdenchev@users.noreply.github.com>"]
 
 [dependencies]
+lazy_static = "1.0"
 
 [dependencies.nom]
 version = "^3.1"

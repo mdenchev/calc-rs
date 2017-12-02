@@ -2,10 +2,33 @@
 
 #[macro_use]
 extern crate nom;
+#[macro_use]
+extern crate lazy_static;
 
+use std::io::{self, Write};
+use std::collections::HashMap;
 use std::str;
-use std::io::{self, Read, Write};
+use std::sync::Mutex;
 use nom::{digit};
+
+lazy_static! {
+    static ref GLOBAL_STORE: Mutex<HashMap<String, f32>> = {
+        let mut m = HashMap::new();
+        m.insert(String::from("ans"), 0.);
+        Mutex::new(m)
+    };
+}
+
+fn global_store_read(var: String) -> Result<f32, String> {
+    match (*GLOBAL_STORE.lock().unwrap()).get(&var) {
+        Some(num) => Ok(*num),
+        None => Err(String::from(format!("{} does not exist", var)))
+    }
+}
+
+fn global_store_write(var: String, val: f32) -> Option<f32> {
+    (*GLOBAL_STORE.lock().unwrap()).insert(var, val)
+}
 
 #[derive(Debug)]
 enum Arith {
@@ -16,18 +39,21 @@ enum Arith {
     Exp(Box<Arith>, Box<Arith>),
     Num(f32),
     Paren(Box<Arith>),
+    Var(String),
 }
 
-fn eval(arith: Arith) -> f32 {
-    match arith {
-        Arith::Add(box a1, box a2) => eval(a1) + eval(a2),
-        Arith::Sub(box a1, box a2) => eval(a1) - eval(a2),
-        Arith::Mul(box a1, box a2) => eval(a1) * eval(a2),
-        Arith::Div(box a1, box a2) => eval(a1) / eval(a2),
-        Arith::Exp(box a1, box a2) => eval(a1).powf(eval(a2)),
+fn eval(arith: Arith) -> Result<f32, String> {
+    let res = match arith {
+        Arith::Add(box a1, box a2) => eval(a1)? + eval(a2)?,
+        Arith::Sub(box a1, box a2) => eval(a1)? - eval(a2)?,
+        Arith::Mul(box a1, box a2) => eval(a1)? * eval(a2)?,
+        Arith::Div(box a1, box a2) => eval(a1)? / eval(a2)?,
+        Arith::Exp(box a1, box a2) => eval(a1)?.powf(eval(a2)?),
         Arith::Num(f) => f,
-        Arith::Paren(box a1) => eval(a1),
-    }
+        Arith::Paren(box a1) => eval(a1)?,
+        Arith::Var(name) => global_store_read(name)?
+    };
+    Ok(res)
 }
 
 #[derive(Debug)]
@@ -69,10 +95,10 @@ named!(parens< Arith >,
 );
 
 named!(factor<Arith>, alt_complete!(
-    map!(
-        ws!(float),
-        Arith::Num)
-    | parens
+    map!(ws!(float), Arith::Num) |
+    map!(ws!(nom::alpha),
+        |var: &[u8]| Arith::Var(str::from_utf8(var).unwrap().to_string())) |
+    parens
 ));
 
 fn fold_exprs(init: Arith, remainder: Vec<(Oper, Arith)>) -> Arith {
@@ -140,7 +166,9 @@ fn main() {
         {
             let r = arith(buffer.as_bytes());
             //println!("{:?}", r);
-            println!("{}", eval(r.unwrap().1));
+            let ans = eval(r.unwrap().1).unwrap();
+            global_store_write(String::from("ans"), ans);
+            println!("{}", ans);
         }
         buffer.clear();
     }
