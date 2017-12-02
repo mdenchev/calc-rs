@@ -4,6 +4,7 @@
 extern crate nom;
 
 use std::str;
+use std::io::{self, Read, Write};
 use nom::{digit};
 
 #[derive(Debug)]
@@ -130,7 +131,17 @@ named!(arith<Arith>, do_parse!(
 ));
 
 fn main() {
-    let r = arith(b" (2^3.0)^4.0 + ( -32.1*4.1)");
-    println!("{:?}", r);
-    println!("{}", eval(r.unwrap().1));
+    let mut buffer = String::new();
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap();
+        io::stdin().read_line(&mut buffer).unwrap();
+        
+        {
+            let r = arith(buffer.as_bytes());
+            //println!("{:?}", r);
+            println!("{}", eval(r.unwrap().1));
+        }
+        buffer.clear();
+    }
 }
