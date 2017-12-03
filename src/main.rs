@@ -31,6 +31,27 @@ fn global_store_write(var: String, val: f32) -> Option<f32> {
 }
 
 #[derive(Debug)]
+enum Expr {
+    Arith(Box<Arith>),
+    VarSet(String, Box<Arith>),
+}
+
+impl Expr {
+    fn eval(self) -> Result<f32, String> {
+        let res = match self {
+            Expr::Arith(box arith) => arith.eval()?,
+            Expr::VarSet(var_name, box arith) => {
+                let res = arith.eval()?;
+                global_store_write(var_name, res);
+                res
+            },
+        };
+        Ok(res)
+    }
+}
+
+
+#[derive(Debug)]
 enum Arith {
     Add(Box<Arith>, Box<Arith>),
     Sub(Box<Arith>, Box<Arith>),
@@ -42,19 +63,22 @@ enum Arith {
     Var(String),
 }
 
-fn eval(arith: Arith) -> Result<f32, String> {
-    let res = match arith {
-        Arith::Add(box a1, box a2) => eval(a1)? + eval(a2)?,
-        Arith::Sub(box a1, box a2) => eval(a1)? - eval(a2)?,
-        Arith::Mul(box a1, box a2) => eval(a1)? * eval(a2)?,
-        Arith::Div(box a1, box a2) => eval(a1)? / eval(a2)?,
-        Arith::Exp(box a1, box a2) => eval(a1)?.powf(eval(a2)?),
-        Arith::Num(f) => f,
-        Arith::Paren(box a1) => eval(a1)?,
-        Arith::Var(name) => global_store_read(name)?
-    };
-    Ok(res)
+impl Arith {
+    fn eval(self) -> Result<f32, String> {
+        let res = match self {
+            Arith::Add(box a1, box a2) => a1.eval()? + a2.eval()?,
+            Arith::Sub(box a1, box a2) => a1.eval()? - a2.eval()?,
+            Arith::Mul(box a1, box a2) => a1.eval()? * a2.eval()?,
+            Arith::Div(box a1, box a2) => a1.eval()? / a2.eval()?,
+            Arith::Exp(box a1, box a2) => a1.eval()?.powf(a2.eval()?),
+            Arith::Num(f) => f,
+            Arith::Paren(box a1) => a1.eval()?,
+            Arith::Var(name) => global_store_read(name)?
+        };
+        Ok(res)
+    }
 }
+
 
 #[derive(Debug)]
 enum Oper {
@@ -156,6 +180,21 @@ named!(arith<Arith>, do_parse!(
     (fold_exprs(init, remainder))
 ));
 
+named!(var_set<Expr>, do_parse!(
+    var: map!(ws!(nom::alpha),
+            |var: &[u8]| str::from_utf8(var).unwrap().to_string()) >>
+    tag!("=") >>
+    arith: ws!(arith) >>
+    (Expr::VarSet(var, Box::new(arith)))
+));
+
+
+named!(expr<Expr>,
+    alt_complete!(
+        var_set |
+        map!(map!(arith, Box::new), Expr::Arith)
+));
+
 fn main() {
     let mut buffer = String::new();
     loop {
@@ -164,9 +203,9 @@ fn main() {
         io::stdin().read_line(&mut buffer).unwrap();
         
         {
-            let r = arith(buffer.as_bytes());
-            //println!("{:?}", r);
-            let ans = eval(r.unwrap().1).unwrap();
+            let expr = expr(buffer.as_bytes()).unwrap().1;
+            //println!("{:?}", expr);
+            let ans = expr.eval().unwrap();
             global_store_write(String::from("ans"), ans);
             println!("{}", ans);
         }
